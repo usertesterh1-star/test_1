@@ -1,0 +1,242 @@
+name: URL Discovery (Step 4)
+
+# الملف AliveSubs.txt مفروض موجود دايماً في روت الريبو وتحدّثه يدوي كل مرة قبل ما تشغّل الـ workflow.
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: write   # لازم عشان الـ job الأخير يعمل commit/push للنتايج
+
+env:
+  INPUT_FILE: AliveSubs.txt
+  # كل أداة بتتقفل لوحدها بعد المدة دي (بالثواني) عشان تسلّم اللي جمعته قبل الـ job يتقفل بالقوة
+  SOFT_TIMEOUT: 20400   # = 340 دقيقة (~5س و40د)
+
+jobs:
+
+  waybackurls:
+    runs-on: ubuntu-latest
+    timeout-minutes: 355
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with:
+          go-version: 'stable'
+      - name: Install waybackurls
+        run: go install github.com/tomnomnom/waybackurls@latest
+      - name: Run waybackurls
+        run: |
+          touch WB1.txt
+          timeout "$SOFT_TIMEOUT" bash -c 'cat "$INPUT_FILE" | waybackurls > WB1.txt' || echo "waybackurls stopped (timeout or finished), keeping partial output"
+      - uses: actions/upload-artifact@v4
+        with:
+          name: WB1
+          path: WB1.txt
+          retention-days: 14
+
+  waymore:
+    runs-on: ubuntu-latest
+    timeout-minutes: 355
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - name: Install waymore
+        run: pip install --upgrade waymore
+      - name: Run waymore
+        run: |
+          touch WM1.txt
+          timeout "$SOFT_TIMEOUT" waymore -i "$INPUT_FILE" -mode U -l 1000 -from 2021 -oU WM1.txt || echo "waymore stopped (timeout or finished), keeping partial output"
+      - uses: actions/upload-artifact@v4
+        with:
+          name: WM1
+          path: WM1.txt
+          retention-days: 14
+
+  gau:
+    runs-on: ubuntu-latest
+    timeout-minutes: 355
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with:
+          go-version: 'stable'
+      - name: Install gau
+        run: go install github.com/lc/gau/v2/cmd/gau@latest
+      - name: Run gau
+        run: |
+          touch GAU1.txt
+          timeout "$SOFT_TIMEOUT" bash -c 'cat "$INPUT_FILE" | gau -t 200 > GAU1.txt' || echo "gau stopped (timeout or finished), keeping partial output"
+      - uses: actions/upload-artifact@v4
+        with:
+          name: GAU1
+          path: GAU1.txt
+          retention-days: 14
+
+  gauplus:
+    runs-on: ubuntu-latest
+    timeout-minutes: 355
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with:
+          go-version: 'stable'
+      - name: Install gauplus
+        run: go install github.com/bp0lr/gauplus@latest
+      - name: Run gauplus
+        run: |
+          touch GAU2.txt
+          timeout "$SOFT_TIMEOUT" bash -c 'gauplus -t 200 -random-agent < "$INPUT_FILE" > GAU2.txt' || echo "gauplus stopped (timeout or finished), keeping partial output"
+      - uses: actions/upload-artifact@v4
+        with:
+          name: GAU2
+          path: GAU2.txt
+          retention-days: 14
+
+  hakrawler:
+    runs-on: ubuntu-latest
+    timeout-minutes: 355
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with:
+          go-version: 'stable'
+      - name: Install hakrawler
+        run: go install github.com/hakluke/hakrawler@latest
+      - name: Run hakrawler
+        run: |
+          touch HK1.txt
+          timeout "$SOFT_TIMEOUT" bash -c 'cat "$INPUT_FILE" | hakrawler -subs -u -insecure > HK1.txt' || echo "hakrawler stopped (timeout or finished), keeping partial output"
+      - uses: actions/upload-artifact@v4
+        with:
+          name: HK1
+          path: HK1.txt
+          retention-days: 14
+
+  katana:
+    runs-on: ubuntu-latest
+    timeout-minutes: 355
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with:
+          go-version: 'stable'
+      - name: Install katana
+        run: go install github.com/projectdiscovery/katana/cmd/katana@latest
+      # katana -headless بيشغّل كروميوم جوه، فمحتاجين المكتبات دي عشان يشتغل على ubuntu-latest
+      - name: Install headless chromium deps
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y libnss3 libatk-bridge2.0-0 libx11-xcb1 libxcomposite1 libxdamage1 libxrandr2 libgbm1 libasound2t64 fonts-liberation
+      - name: Run katana
+        run: |
+          touch KTN1.txt
+          timeout "$SOFT_TIMEOUT" katana -u "$INPUT_FILE" -jc -kf all -d 5 -headless -fx -aff -fs rdn -f url -silent > KTN1.txt || echo "katana stopped (timeout or finished), keeping partial output"
+      - uses: actions/upload-artifact@v4
+        with:
+          name: KTN1
+          path: KTN1.txt
+          retention-days: 14
+
+  gospider:
+    runs-on: ubuntu-latest
+    timeout-minutes: 355
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with:
+          go-version: 'stable'
+      - name: Install gospider
+        run: go install github.com/jaeles-project/gospider@latest
+      - name: Run gospider (main pass)
+        run: |
+          touch GS1.txt
+          timeout "$SOFT_TIMEOUT" gospider -S "$INPUT_FILE" -t 20 -d 3 --sitemap --robots -o GS1.txt || echo "gospider stopped (timeout or finished), keeping partial output"
+      # ملحوظة: الكوماند التانية عندك بتستخدم httpx.txt كمصدر مختلف عن AliveSubs.txt.
+      # ما جاليش غير AliveSubs.txt فاستخدمته هنا كبديل. لو httpx.txt ملف منفصل من مرحلة سابقة، قولي وهضيفه كـ input تاني للـ job.
+      - name: Run gospider (secondary extraction pass)
+        run: |
+          touch GS2.txt
+          timeout "$SOFT_TIMEOUT" bash -c 'gospider -S "$INPUT_FILE" | sed -n "s/.*\(https:\/\/[^ ]*\)]*.*/\1/p" >> GS2.txt' || echo "gospider (pass 2) stopped (timeout or finished), keeping partial output"
+      - uses: actions/upload-artifact@v4
+        with:
+          name: gospider-output
+          path: |
+            GS1.txt
+            GS2.txt
+          retention-days: 14
+
+  paramspider:
+    runs-on: ubuntu-latest
+    timeout-minutes: 355
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - name: Install paramspider
+        run: |
+          git clone --depth 1 https://github.com/devanshbatham/ParamSpider.git
+          cd ParamSpider
+          pip install .
+      - name: Run paramspider
+        run: |
+          mkdir -p results
+          timeout "$SOFT_TIMEOUT" paramspider -l "$INPUT_FILE" || echo "paramspider stopped (timeout or finished), keeping partial output"
+          # paramspider بيكتب مخرجاته في مجلد output/ جوه المسار بتاعه بشكل افتراضي
+          find . -path "*/output/*" -type f -exec cp {} ./results/ \; 2>/dev/null || true
+      - uses: actions/upload-artifact@v4
+        with:
+          name: paramspider-output
+          path: results/
+          retention-days: 14
+
+  x8:
+    runs-on: ubuntu-latest
+    timeout-minutes: 355
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+      - name: Install x8
+        run: cargo install x8
+      - name: Run x8
+        run: |
+          touch X81.txt
+          timeout "$SOFT_TIMEOUT" x8 -u "$INPUT_FILE" -o X81.txt || echo "x8 stopped (timeout or finished), keeping partial output"
+      - uses: actions/upload-artifact@v4
+        with:
+          name: X81
+          path: X81.txt
+          retention-days: 14
+
+  commit-results:
+    runs-on: ubuntu-latest
+    needs: [waybackurls, waymore, gau, gauplus, hakrawler, katana, gospider, paramspider, x8]
+    if: always()   # يشتغل حتى لو أداة أو اتنين فشلوا، عشان نحفظ اللي نجح
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Download all tool artifacts
+        uses: actions/download-artifact@v4
+        with:
+          path: downloaded
+
+      - name: Move results into repo (overwrite each run)
+        run: |
+          rm -rf results
+          mkdir -p results
+          cp -r downloaded/. results/ 2>/dev/null || true
+          find results -type d -empty -delete
+
+      - name: Commit and push
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git add results
+          if git diff --cached --quiet; then
+            echo "No changes to commit"
+          else
+            git commit -m "URL discovery results $(date -u +'%Y-%m-%d %H:%M UTC')"
+            git push
+          fi
